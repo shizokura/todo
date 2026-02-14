@@ -25,19 +25,28 @@ A cross-platform Todo application built with React Native, Expo, and Redux Toolk
 ## Project Structure
 
 ```
-todo-app/
+todo/
 ├── src/
 │   ├── components/       # Reusable UI components
 │   ├── screens/         # Screen components
 │   ├── navigation/      # Navigation configuration
 │   ├── store/           # Redux store and slices
-│   ├── services/        # Database, API services
+│   ├── repositories/    # Database repositories
 │   ├── models/          # Data models/types
 │   ├── utils/           # Helper functions
 │   └── constants/       # App constants
+├── docs/                # Project documentation
+│   ├── prd/            # Product requirements
+│   ├── tasks/          # Task breakdown
+│   └── SETUP.md        # Setup guide
+├── assets/              # App assets
 ├── android/             # Android native code
 ├── ios/                 # iOS native code
-└── web/                 # Web platform files
+├── web/                 # Web platform files
+├── App.tsx              # Main app component
+├── app.json             # Expo configuration
+├── package.json         # Dependencies
+└── tsconfig.json        # TypeScript configuration
 ```
 
 ## Getting Started
