@@ -1,4 +1,4 @@
-export const COLORS = {
+export const LIGHT_COLORS = {
   primary: '#2196F3',
   secondary: '#4CAF50',
   error: '#F44336',
@@ -26,6 +26,37 @@ export const COLORS = {
     none: '#BDBDBD',
   },
 };
+
+export const DARK_COLORS = {
+  primary: '#64B5F6',
+  secondary: '#81C784',
+  error: '#EF5350',
+  warning: '#FFB74D',
+  info: '#64B5F6',
+  success: '#81C784',
+  
+  text: {
+    primary: '#FFFFFF',
+    secondary: '#B0B0B0',
+    disabled: '#6E6E6E',
+    inverse: '#212121',
+  },
+  
+  background: {
+    default: '#121212',
+    paper: '#1E1E1E',
+    overlay: 'rgba(0, 0, 0, 0.7)',
+  },
+  
+  priority: {
+    high: '#EF5350',
+    medium: '#FFB74D',
+    low: '#64B5F6',
+    none: '#6E6E6E',
+  },
+};
+
+export const COLORS = LIGHT_COLORS;
 
 export const TASK_STATUS_COLORS = {
   incomplete: '#BDBDBD',

@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { Task, Category } from '../models/types';
+import { Task, Category, Subtask, Attachment, Reminder, UserPreferences } from '../models/types';
 
 const DB_NAME = 'todo.db';
 
@@ -25,6 +25,7 @@ export class DatabaseService {
         priority TEXT DEFAULT 'none',
         dueDate INTEGER,
         categoryId TEXT,
+        "order" INTEGER DEFAULT 0,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
         FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL
@@ -71,14 +72,25 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_tasks_dueDate ON tasks(dueDate);
       CREATE INDEX IF NOT EXISTS idx_tasks_categoryId ON tasks(categoryId);
       CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+      CREATE INDEX IF NOT EXISTS idx_tasks_order ON tasks("order");
       CREATE INDEX IF NOT EXISTS idx_reminders_taskId ON reminders(taskId);
       CREATE INDEX IF NOT EXISTS idx_subtasks_taskId ON subtasks(taskId);
+      CREATE INDEX IF NOT EXISTS idx_attachments_taskId ON attachments(taskId);
+
+      CREATE TABLE IF NOT EXISTS userPreferences (
+        theme TEXT DEFAULT 'light',
+        fontSize INTEGER DEFAULT 16,
+        defaultView TEXT DEFAULT 'list',
+        enableNotifications INTEGER DEFAULT 1,
+        defaultPriority TEXT DEFAULT 'none',
+        PRIMARY KEY (theme)
+      );
     `);
   }
 
   async getAllTasks(): Promise<Task[]> {
     if (!this.db) return [];
-    const rows = await this.db.getAllAsync<any>('SELECT * FROM tasks ORDER BY createdAt DESC');
+    const rows = await this.db.getAllAsync<any>('SELECT * FROM tasks ORDER BY "order" ASC, createdAt DESC');
     return rows.map(row => ({
       id: row.id,
       title: row.title,
@@ -89,6 +101,7 @@ export class DatabaseService {
       categoryId: row.categoryId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      order: row.order || 0,
     }));
   }
 
@@ -106,14 +119,15 @@ export class DatabaseService {
       categoryId: row.categoryId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      order: row.order || 0,
     };
   }
 
   async createTask(task: Task): Promise<void> {
     if (!this.db) return;
     await this.db.runAsync(
-      `INSERT INTO tasks (id, title, description, status, priority, dueDate, categoryId, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (id, title, description, status, priority, dueDate, categoryId, "order", createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.title,
@@ -122,6 +136,7 @@ export class DatabaseService {
         task.priority,
         task.dueDate || null,
         task.categoryId || null,
+        task.order,
         task.createdAt,
         task.updatedAt,
       ]
@@ -157,6 +172,10 @@ export class DatabaseService {
       fields.push('categoryId = ?');
       values.push(updates.categoryId);
     }
+    if (updates.order !== undefined) {
+      fields.push('"order" = ?');
+      values.push(updates.order);
+    }
 
     fields.push('updatedAt = ?');
     values.push(Date.now());
@@ -176,7 +195,7 @@ export class DatabaseService {
   async searchTasks(query: string): Promise<Task[]> {
     if (!this.db) return [];
     const rows = await this.db.getAllAsync<any>(
-      `SELECT * FROM tasks WHERE title LIKE ? OR description LIKE ? ORDER BY createdAt DESC`,
+      `SELECT * FROM tasks WHERE title LIKE ? OR description LIKE ? ORDER BY "order" ASC, createdAt DESC`,
       [`%${query}%`, `%${query}%`]
     );
     return rows.map(row => ({
@@ -189,6 +208,7 @@ export class DatabaseService {
       categoryId: row.categoryId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      order: row.order || 0,
     }));
   }
 
@@ -251,7 +271,315 @@ export class DatabaseService {
       DELETE FROM subtasks;
       DELETE FROM attachments;
       DELETE FROM reminders;
+      DELETE FROM userPreferences;
     `);
+  }
+
+  async getSubtasksByTaskId(taskId: string): Promise<Subtask[]> {
+    if (!this.db) return [];
+    const rows = await this.db.getAllAsync<any>(
+      'SELECT * FROM subtasks WHERE taskId = ? ORDER BY taskOrder ASC',
+      [taskId]
+    );
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.taskId,
+      title: row.title,
+      completed: Boolean(row.completed),
+      taskOrder: row.taskOrder,
+    }));
+  }
+
+  async createSubtask(subtask: Subtask): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync(
+      'INSERT INTO subtasks (id, taskId, title, completed, taskOrder) VALUES (?, ?, ?, ?, ?)',
+      [subtask.id, subtask.taskId, subtask.title, subtask.completed ? 1 : 0, subtask.taskOrder]
+    );
+  }
+
+  async updateSubtask(id: string, updates: Partial<Subtask>): Promise<void> {
+    if (!this.db) return;
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.title !== undefined) {
+      fields.push('title = ?');
+      values.push(updates.title);
+    }
+    if (updates.completed !== undefined) {
+      fields.push('completed = ?');
+      values.push(updates.completed ? 1 : 0);
+    }
+    if (updates.taskOrder !== undefined) {
+      fields.push('taskOrder = ?');
+      values.push(updates.taskOrder);
+    }
+
+    values.push(id);
+    await this.db.runAsync(
+      `UPDATE subtasks SET ${fields.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+
+  async deleteSubtask(id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync('DELETE FROM subtasks WHERE id = ?', [id]);
+  }
+
+  async deleteSubtasksByTaskId(taskId: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync('DELETE FROM subtasks WHERE taskId = ?', [taskId]);
+  }
+
+  async toggleSubtaskComplete(id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync(
+      'UPDATE subtasks SET completed = CASE WHEN completed = 0 THEN 1 ELSE 0 END WHERE id = ?',
+      [id]
+    );
+  }
+
+  async getAttachmentsByTaskId(taskId: string): Promise<Attachment[]> {
+    if (!this.db) return [];
+    const rows = await this.db.getAllAsync<any>(
+      'SELECT * FROM attachments WHERE taskId = ? ORDER BY createdAt DESC',
+      [taskId]
+    );
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.taskId,
+      fileName: row.fileName,
+      fileSize: row.fileSize,
+      fileType: row.fileType,
+      filePath: row.filePath,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async getAllAttachments(): Promise<Attachment[]> {
+    if (!this.db) return [];
+    const rows = await this.db.getAllAsync<any>('SELECT * FROM attachments ORDER BY createdAt DESC');
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.taskId,
+      fileName: row.fileName,
+      fileSize: row.fileSize,
+      fileType: row.fileType,
+      filePath: row.filePath,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async createAttachment(attachment: Attachment): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync(
+      'INSERT INTO attachments (id, taskId, fileName, fileSize, fileType, filePath, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        attachment.id,
+        attachment.taskId,
+        attachment.fileName,
+        attachment.fileSize,
+        attachment.fileType,
+        attachment.filePath,
+        attachment.createdAt,
+      ]
+    );
+  }
+
+  async deleteAttachment(id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync('DELETE FROM attachments WHERE id = ?', [id]);
+  }
+
+  async deleteAttachmentsByTaskId(taskId: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync('DELETE FROM attachments WHERE taskId = ?', [taskId]);
+  }
+
+  async getRemindersByTaskId(taskId: string): Promise<Reminder[]> {
+    if (!this.db) return [];
+    const rows = await this.db.getAllAsync<any>(
+      'SELECT * FROM reminders WHERE taskId = ? ORDER BY reminderTime ASC',
+      [taskId]
+    );
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.taskId,
+      reminderTime: row.reminderTime,
+      recurringRule: row.recurringRule,
+      isActive: Boolean(row.isActive),
+    }));
+  }
+
+  async getActiveReminders(): Promise<Reminder[]> {
+    if (!this.db) return [];
+    const rows = await this.db.getAllAsync<any>(
+      'SELECT * FROM reminders WHERE isActive = 1 ORDER BY reminderTime ASC'
+    );
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.taskId,
+      reminderTime: row.reminderTime,
+      recurringRule: row.recurringRule,
+      isActive: Boolean(row.isActive),
+    }));
+  }
+
+  async createReminder(reminder: Reminder): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync(
+      'INSERT INTO reminders (id, taskId, reminderTime, recurringRule, isActive) VALUES (?, ?, ?, ?, ?)',
+      [
+        reminder.id,
+        reminder.taskId,
+        reminder.reminderTime,
+        reminder.recurringRule || null,
+        reminder.isActive ? 1 : 0,
+      ]
+    );
+  }
+
+  async updateReminder(id: string, updates: Partial<Reminder>): Promise<void> {
+    if (!this.db) return;
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.reminderTime !== undefined) {
+      fields.push('reminderTime = ?');
+      values.push(updates.reminderTime);
+    }
+    if (updates.recurringRule !== undefined) {
+      fields.push('recurringRule = ?');
+      values.push(updates.recurringRule);
+    }
+    if (updates.isActive !== undefined) {
+      fields.push('isActive = ?');
+      values.push(updates.isActive ? 1 : 0);
+    }
+
+    values.push(id);
+    await this.db.runAsync(
+      `UPDATE reminders SET ${fields.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+
+  async deleteReminder(id: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync('DELETE FROM reminders WHERE id = ?', [id]);
+  }
+
+  async deleteRemindersByTaskId(taskId: string): Promise<void> {
+    if (!this.db) return;
+    await this.db.runAsync('DELETE FROM reminders WHERE taskId = ?', [taskId]);
+  }
+
+  async getUserPreferences(): Promise<UserPreferences | null> {
+    if (!this.db) return null;
+    const row = await this.db.getFirstAsync<any>('SELECT * FROM userPreferences LIMIT 1');
+    if (!row) {
+      return {
+        theme: 'light',
+        fontSize: 16,
+        defaultView: 'list',
+        enableNotifications: true,
+        defaultPriority: 'none',
+      };
+    }
+    return {
+      theme: row.theme || 'light',
+      fontSize: row.fontSize || 16,
+      defaultView: row.defaultView || 'list',
+      enableNotifications: Boolean(row.enableNotifications),
+      defaultPriority: row.defaultPriority || 'none',
+    };
+  }
+
+  async updateUserPreferences(prefs: Partial<UserPreferences>): Promise<void> {
+    if (!this.db) return;
+
+    const existing = await this.getUserPreferences();
+    const merged = { ...existing, ...prefs };
+
+    await this.db.runAsync(
+      `INSERT OR REPLACE INTO userPreferences (theme, fontSize, defaultView, enableNotifications, defaultPriority)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        merged.theme || 'light',
+        merged.fontSize || 16,
+        merged.defaultView || 'list',
+        merged.enableNotifications ? 1 : 0,
+        merged.defaultPriority || 'none',
+      ]
+    );
+  }
+
+  async getCategoryByName(name: string): Promise<Category | null> {
+    if (!this.db) return null;
+    const row = await this.db.getFirstAsync<any>('SELECT * FROM categories WHERE name = ?', [name]);
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      icon: row.icon,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async filterTasks(filter: {
+    status?: string;
+    priority?: string;
+    categoryId?: string;
+    dueDateFrom?: number;
+    dueDateTo?: number;
+  }): Promise<Task[]> {
+    if (!this.db) return [];
+
+    const conditions: string[] = [];
+    const values: any[] = [];
+
+    if (filter.status) {
+      conditions.push('status = ?');
+      values.push(filter.status);
+    }
+    if (filter.priority) {
+      conditions.push('priority = ?');
+      values.push(filter.priority);
+    }
+    if (filter.categoryId) {
+      conditions.push('categoryId = ?');
+      values.push(filter.categoryId);
+    }
+    if (filter.dueDateFrom) {
+      conditions.push('dueDate >= ?');
+      values.push(filter.dueDateFrom);
+    }
+    if (filter.dueDateTo) {
+      conditions.push('dueDate <= ?');
+      values.push(filter.dueDateTo);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = await this.db.getAllAsync<any>(
+      `SELECT * FROM tasks ${whereClause} ORDER BY "order" ASC, createdAt DESC`,
+      values
+    );
+
+    return rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      status: row.status,
+      priority: row.priority,
+      dueDate: row.dueDate,
+      categoryId: row.categoryId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      order: row.order || 0,
+    }));
   }
 }
 

@@ -11,6 +11,7 @@ export interface Task {
   categoryId?: string;
   createdAt: number;
   updatedAt: number;
+  order: number;
 }
 
 export interface Category {

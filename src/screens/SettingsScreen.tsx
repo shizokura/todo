@@ -1,58 +1,54 @@
 import React from 'react';
-import { View, Text, StyleSheet, Switch, ScrollView } from 'react-native';
-import { useAppSelector, useAppDispatch } from '../utils/reduxHooks';
+import { View, Text, StyleSheet, Switch, ScrollView, SafeAreaView } from 'react-native';
+import { useAppSelector, useAppDispatch, useTheme } from '../utils';
 import { toggleTheme } from '../store/slices/uiSlice';
-import { COLORS, SPACING, FONT_SIZES } from '../constants/theme';
+import { SPACING, FONT_SIZES } from '../constants/theme';
 
 const SettingsScreen: React.FC = () => {
   const theme = useAppSelector(state => state.ui.theme);
+  const colors = useTheme();
   const dispatch = useAppDispatch();
 
   const isDarkMode = theme === 'dark';
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.default }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>Appearance</Text>
           
-          <View style={styles.settingItem}>
+          <View style={[styles.settingItem, { backgroundColor: colors.background.paper }]}>
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Dark Mode</Text>
-              <Text style={styles.settingDescription}>Enable dark theme</Text>
+              <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Dark Mode</Text>
+              <Text style={[styles.settingDescription, { color: colors.text.secondary }]}>Enable dark theme</Text>
             </View>
             <Switch
               value={isDarkMode}
-              onValueChange={(value) => {
-                if (value) {
-                  dispatch(toggleTheme());
-                }
-              }}
-              trackColor={{ false: '#BDBDBD', true: COLORS.primary }}
-              thumbColor={isDarkMode ? '#FFFFFF' : '#FFFFFF'}
+              onValueChange={() => dispatch(toggleTheme())}
+              trackColor={{ false: '#BDBDBD', true: colors.primary }}
+              thumbColor={colors.text.inverse}
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>About</Text>
           
-          <View style={styles.settingItem}>
+          <View style={[styles.settingItem, { backgroundColor: colors.background.paper }]}>
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Version</Text>
-              <Text style={styles.settingDescription}>1.0.0</Text>
+              <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Version</Text>
+              <Text style={[styles.settingDescription, { color: colors.text.secondary }]}>1.0.0</Text>
             </View>
           </View>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.default,
   },
   content: {
     padding: SPACING.md,
@@ -63,14 +59,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: FONT_SIZES.medium,
     fontWeight: '600',
-    color: COLORS.text.secondary,
     marginBottom: SPACING.sm,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.background.paper,
     padding: SPACING.md,
     borderRadius: 8,
     marginBottom: SPACING.sm,
@@ -81,12 +75,10 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: FONT_SIZES.large,
     fontWeight: '500',
-    color: COLORS.text.primary,
     marginBottom: 2,
   },
   settingDescription: {
     fontSize: FONT_SIZES.small,
-    color: COLORS.text.secondary,
   },
 });
 
